@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Chat CV RAG</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div id="chat-wrapper">
+    <header>Chat con mi CV</header>
+    <div id="chat-container"></div>
+    <div id="input-container">
+        <input type="text" id="message" placeholder="Escribí tu mensaje...">
+        <button onclick="sendMessage()">Enviar</button>
+    </div>
+</div>
+
+<script>
+    const input = document.getElementById("message");
+
+    // Enviar mensaje al presionar Enter
+    input.addEventListener("keydown", function(event) {
+        if (event.key === "Enter") {
+            event.preventDefault(); // evita salto de línea
+            sendMessage();
+        }
+    });
+
+    async function sendMessage() {
+        const msg = input.value;
+        if (!msg) return;
+
+        const chatContainer = document.getElementById("chat-container");
+        chatContainer.innerHTML += `<div class="message user"><b>Usuario:</b> ${msg}</div>`;
+        input.value = "";
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+
+        const res = await fetch("/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message: msg })
+        });
+
+        const data = await res.json();
+        chatContainer.innerHTML += `<div class="message bot"><b>GROQ:</b> ${data.answer}</div>`;
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+</script>
+</body>
+</html>
