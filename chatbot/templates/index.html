@@ -41,7 +41,7 @@
         });
 
         const data = await res.json();
-        chatContainer.innerHTML += `<div class="message bot"><b>GROQ:</b> ${data.answer}</div>`;
+        chatContainer.innerHTML += `<div class="message bot"><b>LLM:</b> ${data.answer}</div>`;
         chatContainer.scrollTop = chatContainer.scrollHeight;
     }
 </script>

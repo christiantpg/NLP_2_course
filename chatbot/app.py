@@ -26,8 +26,9 @@ ALUMNO = os.getenv("ALUMNO")
 
 dotenv.load_dotenv('../.env')
 INDEX_NAME = os.getenv("PINECONE_INDEX")
+DOCS_PATH="../docs/"
 
-file_loader = PyPDFDirectoryLoader("../docs/")
+file_loader = PyPDFDirectoryLoader(DOCS_PATH)
 docs = file_loader.load()
 
 
@@ -85,7 +86,7 @@ embeddings = HuggingFaceEmbeddings(model_name=os.getenv("EMBEDDINGS_MODEL"))
 groq = ChatGroq(model=os.getenv("GROQ_MODEL"), temperature=0)
 
 
-def create_agents_from_cvs(directory="../docs/"):
+def create_agents_from_cvs(directory=DOCS_PATH):
     agents = []
     for filename in os.listdir(directory):
         if filename.endswith(".pdf"):
@@ -96,7 +97,7 @@ def create_agents_from_cvs(directory="../docs/"):
     return agents
 
 
-agents = create_agents_from_cvs("../docs/")
+agents = create_agents_from_cvs(DOCS_PATH)
 
 pinecone = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
 spec = ServerlessSpec(cloud=os.getenv("PINECONE_CLOUD"), region=os.getenv("PINECONE_REGION"))
@@ -143,6 +144,7 @@ def select_agents(question: str, agents):
 
     for agent in agents:
         if re.search(rf"\b{agent.name}\b", question, re.IGNORECASE):
+            print(f'contesta: {agent.name}')
             selected.append(agent)
 
     if not selected:
@@ -159,15 +161,14 @@ def answer_question(question: str, agents, conversation_history=[]):
         result = agent.answer(question, conversation_history)
         answers.append({
             "agent": agent.name,
-            "answer": result["answer"],
-            "sources": [doc.page_content for doc in result["source_documents"]]
+            "answer": result["answer"]
         })
 
     final_answer = "\n\n".join(
         [f"[{a['agent'].capitalize()}]: {a['answer']}" for a in answers]
     )
 
-    return final_answer, answers
+    return final_answer
 
 
 # -----------------------------
@@ -186,17 +187,11 @@ def index():
 def chat():
     user_input = request.json.get("message")
 
-    ans, result = answer_question(user_input, agents, conversation_history)
-
-    # Llamada a la chain con historial
-    # result = retrieval_chain({"question": user_input, "chat_history": conversation_history})
-
-    # Actualizamos el historial
-    conversation_history.append((user_input, result["answer"]))
+    ans = answer_question(user_input, agents, conversation_history)
+    conversation_history.append((user_input, ans))
 
     return jsonify({
-        "answer": result["answer"],
-        "sources": [doc.page_content for doc in result["sources"]]
+        "answer": ans
     })
 
 
