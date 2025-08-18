@@ -18,9 +18,9 @@
     const input = document.getElementById("message");
 
     // Enviar mensaje al presionar Enter
-    input.addEventListener("keydown", function(event) {
+    input.addEventListener("keydown", function (event) {
         if (event.key === "Enter") {
-            event.preventDefault(); // evita salto de línea
+            event.preventDefault();
             sendMessage();
         }
     });
@@ -34,7 +34,6 @@
         input.value = "";
         chatContainer.scrollTop = chatContainer.scrollHeight;
 
-        // 👉 Agregamos loading
         const loadingId = "loading-" + Date.now();
         chatContainer.innerHTML += `
             <div class="message bot loading" id="${loadingId}">
@@ -45,13 +44,12 @@
         try {
             const res = await fetch("/chat", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ message: msg })
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({message: msg})
             });
 
             const data = await res.json();
 
-            // 👉 Reemplazamos el loading por la respuesta real
             const loadingEl = document.getElementById(loadingId);
             if (loadingEl) {
                 loadingEl.outerHTML = `<div class="message bot">${data.answer}</div>`;
