@@ -14,13 +14,11 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_pinecone import PineconeVectorStore
 from pinecone import Pinecone, ServerlessSpec
 
-dotenv.load_dotenv()
+dotenv.load_dotenv('../.env')
 
 DOCS_CHUNK_SIZE = int(os.getenv("DOCS_CHUNK_SIZE"))
 DOCS_CHUNK_OVERLAP = int(os.getenv("DOCS_CHUNK_OVERLAP"))
 ALUMNO = os.getenv("ALUMNO")
-
-dotenv.load_dotenv('../.env')
 INDEX_NAME = os.getenv("PINECONE_INDEX")
 DOCS_PATH = "../docs/"
 
@@ -177,6 +175,7 @@ def ask(question: str, agents, conversation_history=[]):
 parser = argparse.ArgumentParser()
 parser.add_argument("--create-index", type=bool, default=False)
 parser.add_argument("--reloader", type=bool, default=False)
+parser.add_argument("--upload-data", type=bool, default=False)
 
 args = parser.parse_args()
 
@@ -190,8 +189,9 @@ spec = ServerlessSpec(cloud=os.getenv("PINECONE_CLOUD"), region=os.getenv("PINEC
 agents = create_agents_from_cvs(pinecone, DOCS_PATH, args.create_index)
 multiagent = MultiAgent(agents, groq, "multiagent")
 
-for agent in agents:
-    upload_to_pinecone(agent.index, agent.chunks, agent.vectors)
+if args.upload_data:
+    for agent in agents:
+        upload_to_pinecone(agent.index, agent.chunks, agent.vectors)
 
 # -----------------------------
 # FLASK APP
