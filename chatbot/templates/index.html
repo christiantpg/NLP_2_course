@@ -3,6 +3,7 @@
 <head>
     <title>Chat CV RAG</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
 <div id="chat-wrapper">
@@ -15,6 +16,7 @@
 </div>
 
 <script>
+
     const input = document.getElementById("message");
 
     // Enviar mensaje al presionar Enter
@@ -50,9 +52,11 @@
 
             const data = await res.json();
 
+            const formatted = marked.parse(data.answer);
+
             const loadingEl = document.getElementById(loadingId);
             if (loadingEl) {
-                loadingEl.outerHTML = `<div class="message bot">${data.answer}</div>`;
+                loadingEl.outerHTML = `<div class="message bot">${formatted}</div>`;
             }
         } catch (err) {
             const loadingEl = document.getElementById(loadingId);

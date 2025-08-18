@@ -1,3 +1,4 @@
+import argparse
 import os
 import re
 
@@ -7,7 +8,6 @@ from langchain.chains import create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.prompts import ChatPromptTemplate
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.document_loaders import PyPDFDirectoryLoader
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_groq import ChatGroq
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -24,12 +24,9 @@ dotenv.load_dotenv('../.env')
 INDEX_NAME = os.getenv("PINECONE_INDEX")
 DOCS_PATH = "../docs/"
 
-file_loader = PyPDFDirectoryLoader(DOCS_PATH)
-docs = file_loader.load()
-
 
 class Agent:
-    def __init__(self, filename: str, filepath: str, embeddings, llm):
+    def __init__(self, filename: str, filepath: str, embeddings, llm, pinecone, create_index=False):
         name = os.path.splitext(filename)[0].lower()
         self.name = name
         self.cv_filepath = filepath
@@ -37,6 +34,8 @@ class Agent:
         self.index = name
         self.llm = llm
         self.default = name == ALUMNO
+        self.pinecone = pinecone
+        self.create_index = create_index
 
         self.cv = None
         self.splits = None
@@ -57,6 +56,19 @@ class Agent:
         self.vectors = embeddings.embed_documents([doc.page_content for doc in self.chunks])
 
     def _create_vectorstore(self):
+        if self.index in self.pinecone.list_indexes().names() and self.create_index:
+            self.pinecone.delete_index(self.index)
+            print("index {} borrado".format(self.index))
+
+        if self.index not in self.pinecone.list_indexes().names():
+            print("index creado con el nombre: {}".format(self.index))
+            self.pinecone.create_index(
+                self.index,
+                dimension=384,
+                metric='cosine',
+                spec=spec
+            )
+
         self.vectorstore = PineconeVectorStore.from_documents(
             self.chunks,
             self.embeddings,
@@ -109,43 +121,22 @@ class MultiAgent:
         return self.llm.invoke(prompt).content
 
 
-embeddings = HuggingFaceEmbeddings(model_name=os.getenv("EMBEDDINGS_MODEL"))
-groq = ChatGroq(model=os.getenv("GROQ_MODEL"), temperature=0)
-
-
-def create_agents_from_cvs(directory=DOCS_PATH):
+def create_agents_from_cvs(pinecone, directory=DOCS_PATH, create_index=False):
     agents = []
     for filename in os.listdir(directory):
         if filename.endswith(".pdf"):
             filepath = os.path.join(directory, filename)
-            agent = Agent(filename, filepath, embeddings=embeddings, llm=groq)
+            agent = Agent(
+                filename,
+                filepath,
+                embeddings=embeddings,
+                llm=groq,
+                pinecone=pinecone,
+                create_index=create_index
+            )
             agents.append(agent)
 
     return agents
-
-
-agents = create_agents_from_cvs(DOCS_PATH)
-multiagent = MultiAgent(agents, groq, "multiagent")
-
-pinecone = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
-spec = ServerlessSpec(cloud=os.getenv("PINECONE_CLOUD"), region=os.getenv("PINECONE_REGION"))
-
-
-def recreate_index(index_name, pinecone, spec):
-    if index_name in pinecone.list_indexes().names():
-        pinecone.delete_index(index_name)
-    print("index {} borrado".format(index_name))
-
-    if index_name not in pinecone.list_indexes().names():
-        print("index creado con el nombre: {}".format(index_name))
-        pinecone.create_index(
-            index_name,
-            dimension=384,
-            metric='cosine',
-            spec=spec
-        )
-    else:
-        print("el index con el nombre {} ya estaba creado".format(index_name))
 
 
 def upload_to_pinecone(index, documents, vectors):
@@ -160,11 +151,6 @@ def upload_to_pinecone(index, documents, vectors):
         ])
 
     print(f"vectores cargados en {index}")
-
-
-for agent in agents:
-    recreate_index(agent.index, pinecone, spec)
-    upload_to_pinecone(agent.index, agent.chunks, agent.vectors)
 
 
 def ask(question: str, agents, conversation_history=[]):
@@ -187,6 +173,25 @@ def ask(question: str, agents, conversation_history=[]):
 
     return f"[{queried_agent.name.capitalize()}]: {answer}"
 
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--create-index", type=bool, default=False)
+parser.add_argument("--reloader", type=bool, default=False)
+
+args = parser.parse_args()
+
+print("Inicializando Chatbot")
+
+embeddings = HuggingFaceEmbeddings(model_name='sentence-transformers/all-MiniLM-L6-v2')
+groq = ChatGroq(model='llama-3.3-70b-versatile', temperature=0)
+pinecone = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+spec = ServerlessSpec(cloud=os.getenv("PINECONE_CLOUD"), region=os.getenv("PINECONE_REGION"))
+
+agents = create_agents_from_cvs(pinecone, DOCS_PATH, args.create_index)
+multiagent = MultiAgent(agents, groq, "multiagent")
+
+for agent in agents:
+    upload_to_pinecone(agent.index, agent.chunks, agent.vectors)
 
 # -----------------------------
 # FLASK APP
@@ -213,4 +218,4 @@ def chat():
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, use_reloader=args.reloader)

@@ -11,8 +11,8 @@ body {
 #chat-wrapper {
     display: flex;
     flex-direction: column;
-    width: 400px;             /* ancho fijo */
-    min-height: 500px;        /* altura mínima */
+    width: 1000px;             /* ancho fijo */
+    min-height: 400px;        /* altura mínima */
     max-height: 80vh;         /* altura máxima antes de scroll */
     background-color: #fff;
     border-radius: 10px;
