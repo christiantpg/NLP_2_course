@@ -1,4 +1,4 @@
-# Curso Procesamiento del Lenguaje Natural 2 – Trabajos Prácticos
+# Curso Procesamiento del Lenguaje Natural 2
 
 Este repositorio contiene tres trabajos prácticos desarrollados para la materia de **Procesamiento de Lenguaje Natural 2**. Cada TP aborda un desafío distinto, desde la modificación de un modelo base hasta la construcción de un sistema multiagente.
 
