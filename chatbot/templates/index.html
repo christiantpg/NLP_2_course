@@ -30,18 +30,39 @@
         if (!msg) return;
 
         const chatContainer = document.getElementById("chat-container");
-        chatContainer.innerHTML += `<div class="message user"><b>Usuario:</b> ${msg}</div>`;
+        chatContainer.innerHTML += `<div class="message user">${msg}</div>`;
         input.value = "";
         chatContainer.scrollTop = chatContainer.scrollHeight;
 
-        const res = await fetch("/chat", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ message: msg })
-        });
+        // 👉 Agregamos loading
+        const loadingId = "loading-" + Date.now();
+        chatContainer.innerHTML += `
+            <div class="message bot loading" id="${loadingId}">
+                <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+            </div>`;
+        chatContainer.scrollTop = chatContainer.scrollHeight;
 
-        const data = await res.json();
-        chatContainer.innerHTML += `<div class="message bot"><b>LLM:</b> ${data.answer}</div>`;
+        try {
+            const res = await fetch("/chat", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ message: msg })
+            });
+
+            const data = await res.json();
+
+            // 👉 Reemplazamos el loading por la respuesta real
+            const loadingEl = document.getElementById(loadingId);
+            if (loadingEl) {
+                loadingEl.outerHTML = `<div class="message bot">${data.answer}</div>`;
+            }
+        } catch (err) {
+            const loadingEl = document.getElementById(loadingId);
+            if (loadingEl) {
+                loadingEl.outerHTML = `<div class="message bot error">Error al obtener respuesta</div>`;
+            }
+        }
+
         chatContainer.scrollTop = chatContainer.scrollHeight;
     }
 </script>

@@ -1,7 +1,3 @@
-# -----------------------------
-# IMPORTS
-# -----------------------------
-
 import os
 import re
 
@@ -26,7 +22,7 @@ ALUMNO = os.getenv("ALUMNO")
 
 dotenv.load_dotenv('../.env')
 INDEX_NAME = os.getenv("PINECONE_INDEX")
-DOCS_PATH="../docs/"
+DOCS_PATH = "../docs/"
 
 file_loader = PyPDFDirectoryLoader(DOCS_PATH)
 docs = file_loader.load()
@@ -40,7 +36,7 @@ class Agent:
         self.embeddings = embeddings
         self.index = name
         self.llm = llm
-        self.student = name == ALUMNO
+        self.default = name == ALUMNO
 
         self.cv = None
         self.splits = None
@@ -79,7 +75,38 @@ class Agent:
         self.chain = create_retrieval_chain(self.retriever, doc_chain)
 
     def answer(self, question: str, history) -> str:
-        return self.chain.invoke({"input": question, "name": self.name, "chat_history": history})
+        result = self.chain.invoke({"input": question, "name": self.name, "chat_history": history})
+        return result["answer"]
+
+
+class MultiAgent:
+    def __init__(self, agents, llm, name):
+        self.agents = agents
+        self.llm = llm
+        self.name = name
+
+    def answer(self, mentioned, question: str):
+        answers = []
+        for agent in mentioned:
+            result = agent.answer(question, conversation_history)
+            answers.append({
+                "agent": agent.name,
+                "answer": result,
+            })
+
+        context = "\n\n".join(
+            [f"[{a['agent'].capitalize()}]: {a['answer']}" for a in answers]
+        )
+
+        prompt = f"""La consulta fue: {question}
+
+        Aquí tienes información de varios CVs:
+        {context}
+
+        Responde de forma integrada y comparativa, mencionando a cada persona según corresponda.
+        """
+
+        return self.llm.invoke(prompt).content
 
 
 embeddings = HuggingFaceEmbeddings(model_name=os.getenv("EMBEDDINGS_MODEL"))
@@ -98,6 +125,7 @@ def create_agents_from_cvs(directory=DOCS_PATH):
 
 
 agents = create_agents_from_cvs(DOCS_PATH)
+multiagent = MultiAgent(agents, groq, "multiagent")
 
 pinecone = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
 spec = ServerlessSpec(cloud=os.getenv("PINECONE_CLOUD"), region=os.getenv("PINECONE_REGION"))
@@ -139,36 +167,25 @@ for agent in agents:
     upload_to_pinecone(agent.index, agent.chunks, agent.vectors)
 
 
-def select_agents(question: str, agents):
-    selected = []
+def ask(question: str, agents, conversation_history=[]):
+    mentioned = [
+        agent for agent in agents
+        if re.search(agent.name, question, re.IGNORECASE)
+    ]
 
-    for agent in agents:
-        if re.search(rf"\b{agent.name}\b", question, re.IGNORECASE):
-            print(f'contesta: {agent.name}')
-            selected.append(agent)
+    if len(mentioned) == 0:
+        queried_agent = next(agent for agent in agents if agent.default)
+        answer = queried_agent.answer(question, conversation_history)
 
-    if not selected:
-        selected = [agent for agent in agents if agent.student]
+    elif len(mentioned) == 1:
+        queried_agent = mentioned[0]
+        answer = queried_agent.answer(question, conversation_history)
 
-    return selected
+    else:
+        queried_agent = multiagent
+        answer = queried_agent.answer(mentioned, question)
 
-
-def answer_question(question: str, agents, conversation_history=[]):
-    selected_agents = select_agents(question, agents)
-    answers = []
-
-    for agent in selected_agents:
-        result = agent.answer(question, conversation_history)
-        answers.append({
-            "agent": agent.name,
-            "answer": result["answer"]
-        })
-
-    final_answer = "\n\n".join(
-        [f"[{a['agent'].capitalize()}]: {a['answer']}" for a in answers]
-    )
-
-    return final_answer
+    return f"[{queried_agent.name.capitalize()}]: {answer}"
 
 
 # -----------------------------
@@ -187,7 +204,7 @@ def index():
 def chat():
     user_input = request.json.get("message")
 
-    ans = answer_question(user_input, agents, conversation_history)
+    ans = ask(user_input, agents, conversation_history)
     conversation_history.append((user_input, ans))
 
     return jsonify({
